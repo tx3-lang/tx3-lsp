@@ -26,12 +26,12 @@ pub async fn run(
 ) -> Result<Option<Value>, Error> {
     let args: Args = args.try_into()?;
 
-    let protocol = context.get_document_protocol(&args.document_url)?;
+    let mut program = context.get_document_program(&args.document_url)?;
 
-    let ast = protocol.ast().to_owned();
+    tx3_lang::analyzing::analyze(&mut program).ok().unwrap();
 
     let out = json!({
-        "ast": ast,
+        "ast": program,
     });
 
     Ok(Some(out))

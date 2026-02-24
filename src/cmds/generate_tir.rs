@@ -1,7 +1,5 @@
-use std::collections::HashMap;
-
 use serde_json::{json, Value};
-
+use tx3_tir::reduce::Apply;
 use crate::{Context, Error};
 
 #[derive(Debug)]
@@ -35,20 +33,18 @@ pub async fn run(
 ) -> Result<Option<Value>, Error> {
     let args: Args = args.try_into()?;
 
-    let protocol = context.get_document_protocol(&args.document_url)?;
+    let mut program = context.get_document_program(&args.document_url)?;
 
-    let prototx = protocol.new_tx(&args.tx_name)?;
+    tx3_lang::analyzing::analyze(&mut program).ok().unwrap();
 
-    let params = prototx
-        .find_params()
-        .iter()
-        .map(|(k, v)| (k.to_string(), serde_json::to_value(v).unwrap()))
-        .collect::<HashMap<String, Value>>();
+    let tx = tx3_lang::lowering::lower(&program, &args.tx_name).unwrap();
+
+    let tir = tx3_tir::encoding::to_bytes(&tx);
 
     let out = json!({
-        "tir": hex::encode(prototx.ir_bytes()),
-        "version": tx3_lang::ir::IR_VERSION,
-        "parameters": params,
+        "tir": hex::encode(&tir.0),
+        "version": tir.1,
+        "parameters": tx.params(),
     });
 
     Ok(Some(out))

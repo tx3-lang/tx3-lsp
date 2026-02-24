@@ -25,16 +25,17 @@ pub async fn run(
 ) -> Result<Option<Value>, Error> {
     let args: Args = args.try_into()?;
 
-    let protocol = context.get_document_protocol(&args.document_url)?;
-    let ast = protocol.ast().to_owned();
+    let mut program = context.get_document_program(&args.document_url)?;
 
-    let tx_svgs: Vec<Value> = ast
+    tx3_lang::analyzing::analyze(&mut program).ok().unwrap();
+
+    let tx_svgs: Vec<Value> = program
         .txs
         .iter()
         .map(|tx| {
-            let svg = tx_to_svg(&ast, tx);
+            let svg = tx_to_svg(&program, tx);
             json!({
-                "tx_name": tx.name,
+                "tx_name": tx.name.value,
                 "svg": svg
             })
         })

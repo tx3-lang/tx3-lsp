@@ -6,7 +6,6 @@ use thiserror::Error;
 use tower_lsp::jsonrpc::ErrorCode;
 use tower_lsp::lsp_types::*;
 use tower_lsp::Client;
-use tx3_lang::Protocol;
 
 mod ast_to_svg;
 mod cmds;
@@ -27,8 +26,8 @@ pub enum Error {
     #[error("Document not found: {0}")]
     DocumentNotFound(Url),
 
-    #[error("Protocol loading error: {0}")]
-    ProtocolLoadingError(#[from] tx3_lang::loading::Error),
+    #[error("Program parsing error: {0}")]
+    ProgramParsingError(#[from] tx3_lang::parsing::Error),
 
     #[error("Tx3 Lowering error: {0}")]
     TxLoweringError(#[from] tx3_lang::lowering::Error),
@@ -41,7 +40,7 @@ impl From<&Error> for ErrorCode {
             Error::ParseError(_) => ErrorCode::InvalidParams,
             Error::DocumentNotFound(_) => ErrorCode::InvalidParams,
             Error::InvalidCommandArgs(_) => ErrorCode::InvalidParams,
-            Error::ProtocolLoadingError(_) => ErrorCode::InvalidRequest,
+            Error::ProgramParsingError(_) => ErrorCode::InvalidRequest,
             Error::TxLoweringError(_) => ErrorCode::InvalidRequest,
         }
     }
@@ -243,7 +242,7 @@ impl Context {
                             token_modifiers: MOD_DECLARATION | MOD_DEFINITION,
                         });
                     }
-                    visitor::SymbolAtOffset::TypeIdentifier(x) => {
+                    visitor::SymbolAtOffset::TypeIdentifier(_x) => {
                         // TODO: wait for the introduction of `TypeAnnotation` in AST
 
                         // token_infos.push(TokenInfo {
@@ -315,12 +314,9 @@ impl Context {
         Ok(document.value().clone())
     }
 
-    fn get_document_protocol(&self, url_arg: &str) -> Result<Protocol, Error> {
+    fn get_document_program(&self, url_arg: &str) -> Result<tx3_lang::ast::Program, Error> {
         let document = self.get_document(url_arg)?;
-
-        let protocol = Protocol::from_string(document.to_string()).load()?;
-
-        Ok(protocol)
+        tx3_lang::parsing::parse_string(document.to_string().as_str()).map_err(Error::ProgramParsingError)
     }
 
     async fn process_document(&self, uri: Url, text: &str) -> Vec<Diagnostic> {
