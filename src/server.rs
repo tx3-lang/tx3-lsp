@@ -1,6 +1,7 @@
+use ropey::Rope;
 use serde_json::Value;
 use tower_lsp::{jsonrpc::Result, lsp_types::*, LanguageServer};
-use tx3_lang::ast::{Identifier, Symbol};
+use tx3_lang::ast::Identifier;
 
 use crate::{
     cmds, position_to_offset, span_contains, span_to_lsp_range,
@@ -414,92 +415,114 @@ impl LanguageServer for Context {
         let mut symbols: Vec<DocumentSymbol> = Vec::new();
         let uri = &params.text_document.uri;
 
-        let Ok(path) = uri.to_file_path() else {
-            return Ok(None);
+        let path = uri.to_file_path().ok();
+
+        let text = if let Some(document) = self.documents.get(uri) {
+            document.value().to_string()
+        } else if let Some(path) = path.as_ref() {
+            match std::fs::read_to_string(path) {
+                Ok(text) => text,
+                Err(_) => return Ok(Some(DocumentSymbolResponse::Nested(vec![]))),
+            }
+        } else {
+            return Ok(Some(DocumentSymbolResponse::Nested(vec![])));
         };
 
-        let loader = tx3_lang::loading::ProtocolLoader::from_file(&path);
-        let Ok(protocol) = loader.load() else {
-            return Ok(None);
+        let rope = Rope::from_str(&text);
+
+        let mut ast = match tx3_lang::parsing::parse_string(text.as_str()) {
+            Ok(ast) => ast,
+            Err(_) => return Ok(None),
         };
 
-        let Some(document) = self.documents.get(uri) else {
-            return Ok(None);
-        };
+        // Track counts before import resolution
+        let local_types_count = ast.types.len();
+        let local_aliases_count = ast.aliases.len();
 
-        let ast = protocol.ast();
+        if let Some(root) = path.as_ref().and_then(|path| path.parent()) {
+            let loader = tx3_lang::importing::FsLoader::new(root);
+            let _ = tx3_lang::importing::resolve_imports(&mut ast, Some(&loader));
+        }
 
-        if let Some(scope) = ast.scope() {
-            let mut current_scope = Some(scope);
-            while let Some(s) = current_scope {
-                for (name, symbol) in s.symbols() {
-                    let (kind, range, detail) = match symbol {
-                        Symbol::PartyDef(def) => (
-                            SymbolKind::OBJECT,
-                            span_to_lsp_range(document.value(), &def.span),
-                            "Party".to_string(),
-                        ),
-                        Symbol::PolicyDef(def) => (
-                            SymbolKind::KEY,
-                            span_to_lsp_range(document.value(), &def.span),
-                            "Policy".to_string(),
-                        ),
-                        Symbol::AssetDef(def) => (
-                            SymbolKind::FIELD,
-                            span_to_lsp_range(document.value(), &def.span),
-                            "Asset".to_string(),
-                        ),
-                        Symbol::TypeDef(def) => (
-                            SymbolKind::TYPE_PARAMETER,
-                            span_to_lsp_range(document.value(), &def.span),
-                            "Type".to_string(),
-                        ),
-                        Symbol::AliasDef(def) => (
-                            SymbolKind::INTERFACE,
-                            span_to_lsp_range(document.value(), &def.span),
-                            "Alias".to_string(),
-                        ),
-                        Symbol::RecordField(def) => (
-                            SymbolKind::FIELD,
-                            span_to_lsp_range(document.value(), &def.span),
-                            "Field".to_string(),
-                        ),
-                        Symbol::VariantCase(def) => (
-                            SymbolKind::ENUM_MEMBER,
-                            span_to_lsp_range(document.value(), &def.span),
-                            "Variant Case".to_string(),
-                        ),
-                        Symbol::EnvVar(_, ty) => (
-                            SymbolKind::VARIABLE,
-                            Range::default(),
-                            format!("EnvVar({:?})", ty),
-                        ),
-                        Symbol::ParamVar(_, ty) => (
-                            SymbolKind::VARIABLE,
-                            Range::default(),
-                            format!("ParamVar({:?})", ty),
-                        ),
-                        Symbol::LocalExpr(_) => (
-                            SymbolKind::VARIABLE,
-                            Range::default(),
-                            "LocalExpr".to_string(),
-                        ),
-                        Symbol::Output(idx) => (
-                            SymbolKind::OBJECT,
-                            Range::default(),
-                            format!("Output({})", idx),
-                        ),
-                        Symbol::Input(_) => {
-                            (SymbolKind::OBJECT, Range::default(), "Input".to_string())
-                        }
-                        Symbol::Fees => {
-                            (SymbolKind::CONSTANT, Range::default(), "Fees".to_string())
-                        }
-                    };
+        for party in &ast.parties {
+            symbols.push(make_symbol(
+                party.name.value.clone(),
+                "Party".to_string(),
+                SymbolKind::OBJECT,
+                span_to_lsp_range(&rope, &party.span),
+                None,
+            ));
+        }
 
-                    symbols.push(make_symbol(name.clone(), detail, kind, range, None));
-                }
-                current_scope = s.parent();
+        for policy in &ast.policies {
+            symbols.push(make_symbol(
+                policy.name.value.clone(),
+                "Policy".to_string(),
+                SymbolKind::KEY,
+                span_to_lsp_range(&rope, &policy.span),
+                None,
+            ));
+        }
+
+        for asset in &ast.assets {
+            symbols.push(make_symbol(
+                asset.name.value.clone(),
+                "Asset".to_string(),
+                SymbolKind::FIELD,
+                span_to_lsp_range(&rope, &asset.span),
+                None,
+            ));
+        }
+
+        // Local types
+        for (idx, type_def) in ast.types.iter().enumerate() {
+            if idx < local_types_count {
+                symbols.push(make_symbol(
+                    type_def.name.value.clone(),
+                    "Record".to_string(),
+                    SymbolKind::TYPE_PARAMETER,
+                    span_to_lsp_range(&rope, &type_def.span),
+                    None,
+                ));
+            }
+        }
+
+        // Imported types
+        for (idx, type_def) in ast.types.iter().enumerate() {
+            if idx >= local_types_count {
+                symbols.push(make_symbol(
+                    type_def.name.value.clone(),
+                    "Imported Type".to_string(),
+                    SymbolKind::TYPE_PARAMETER,
+                    span_to_lsp_range(&rope, &type_def.span),
+                    None,
+                ));
+            }
+        }
+
+        // Local aliases
+        for (idx, alias) in ast.aliases.iter().enumerate() {
+            if idx < local_aliases_count {
+                symbols.push(make_symbol(
+                    alias.name.value.clone(),
+                    "Alias".to_string(),
+                    SymbolKind::INTERFACE,
+                    span_to_lsp_range(&rope, &alias.span),
+                    None,
+                ));
+            }
+        }
+
+        // Imported aliases
+        for (idx, alias) in ast.aliases.iter().enumerate() {
+            if idx >= local_aliases_count {
+                symbols.push(make_symbol(
+                    alias.name.value.clone(),
+                    "Imported Alias".to_string(),
+                    SymbolKind::INTERFACE,
+                    span_to_lsp_range(&rope, &alias.span),
+                    None,
+                ));
             }
         }
 
@@ -510,7 +533,7 @@ impl LanguageServer for Context {
                     parameter.name.value.clone(),
                     format!("Parameter<{:?}>", parameter.r#type),
                     SymbolKind::FIELD,
-                    span_to_lsp_range(document.value(), &tx.parameters.span),
+                    span_to_lsp_range(&rope, &tx.parameters.span),
                     None,
                 ));
             }
@@ -520,7 +543,7 @@ impl LanguageServer for Context {
                     input.name.clone(),
                     "Input".to_string(),
                     SymbolKind::OBJECT,
-                    span_to_lsp_range(document.value(), &input.span),
+                    span_to_lsp_range(&rope, &input.span),
                     None,
                 ));
             }
@@ -534,7 +557,7 @@ impl LanguageServer for Context {
                     name.value.clone(),
                     "Output".to_string(),
                     SymbolKind::OBJECT,
-                    span_to_lsp_range(document.value(), &output.span),
+                    span_to_lsp_range(&rope, &output.span),
                     None,
                 ));
             }
@@ -543,7 +566,7 @@ impl LanguageServer for Context {
                 tx.name.value.clone(),
                 "Tx".to_string(),
                 SymbolKind::METHOD,
-                span_to_lsp_range(document.value(), &tx.span),
+                span_to_lsp_range(&rope, &tx.span),
                 Some(children),
             ));
         }
