@@ -316,7 +316,8 @@ impl Context {
 
     fn get_document_program(&self, url_arg: &str) -> Result<tx3_lang::ast::Program, Error> {
         let document = self.get_document(url_arg)?;
-        tx3_lang::parsing::parse_string(document.to_string().as_str()).map_err(Error::ProgramParsingError)
+        tx3_lang::parsing::parse_string(document.to_string().as_str())
+            .map_err(Error::ProgramParsingError)
     }
 
     async fn process_document(&self, uri: Url, text: &str) -> Vec<Diagnostic> {
@@ -327,6 +328,13 @@ impl Context {
 
         match ast {
             Ok(mut ast) => {
+                if let Ok(path) = uri.to_file_path() {
+                    if let Some(root) = path.parent() {
+                        let loader = tx3_lang::importing::FsLoader::new(root);
+                        let _ = tx3_lang::importing::resolve_imports(&mut ast, Some(&loader));
+                    }
+                }
+
                 let analysis = tx3_lang::analyzing::analyze(&mut ast);
                 analyze_report_to_diagnostic(&rope, &analysis)
             }
