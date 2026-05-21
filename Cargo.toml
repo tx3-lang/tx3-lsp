@@ -4,10 +4,10 @@ description = "Language Server Protocol implementation for tx3-lang"
 authors = ["TxPipe"]
 edition = "2021"
 license = "Apache-2.0"
-repository = "https://github.com/tx3-lang/lsp"
+repository = "https://github.com/tx3-lang/tx3-lsp"
 version = "0.8.0"
 keywords = ["blockchain", "cardano", "utxo", "dsl"]
-homepage = "https://github.com/tx3-lang/lsp"
+homepage = "https://github.com/tx3-lang/tx3-lsp"
 readme = "README.md"
 
 [dependencies]
