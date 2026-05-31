@@ -211,6 +211,14 @@ impl Context {
                             TOKEN_TYPE
                         } else if ast.assets.iter().any(|a| a.name.value == identifier.value) {
                             TOKEN_CLASS
+                        } else if ast
+                            .functions
+                            .iter()
+                            .any(|f| f.name.value == identifier.value)
+                        {
+                            // Both a function's declaration name and any call-site
+                            // callee resolve here, since they share the identifier.
+                            TOKEN_FUNCTION
                         } else {
                             let mut found_type = None;
 
@@ -233,6 +241,25 @@ impl Context {
                                     break;
                                 }
                             }
+
+                            // Parameters referenced inside a function body.
+                            if found_type.is_none() {
+                                for func in &ast.functions {
+                                    if crate::span_contains(&func.span, offset) {
+                                        for param in &func.parameters.parameters {
+                                            if param.name.value == identifier.value {
+                                                found_type = Some(TOKEN_PARAMETER);
+                                                break;
+                                            }
+                                        }
+                                    }
+
+                                    if found_type.is_some() {
+                                        break;
+                                    }
+                                }
+                            }
+
                             found_type.unwrap_or(TOKEN_VARIABLE)
                         };
 
