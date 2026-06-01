@@ -168,6 +168,42 @@ impl LanguageServer for Context {
                     }
                 }
 
+                // A call-site callee (or the declaration name itself) jumps to
+                // the function definition.
+                for func in &ast.functions {
+                    if func.name.value == identifier.value {
+                        return Ok(Some(GotoDefinitionResponse::Scalar(Location {
+                            uri: uri.clone(),
+                            range: span_to_lsp_range(document.value(), &func.span),
+                        })));
+                    }
+                }
+
+                // Parameters and let-bindings referenced inside a function body.
+                for func in &ast.functions {
+                    if span_contains(&func.span, offset) {
+                        for param in &func.parameters.parameters {
+                            if param.name.value == identifier.value {
+                                return Ok(Some(GotoDefinitionResponse::Scalar(Location {
+                                    uri: uri.clone(),
+                                    range: span_to_lsp_range(document.value(), &param.name.span),
+                                })));
+                            }
+                        }
+
+                        if let Some(body) = &func.body {
+                            for binding in &body.let_bindings {
+                                if binding.name.value == identifier.value {
+                                    return Ok(Some(GotoDefinitionResponse::Scalar(Location {
+                                        uri: uri.clone(),
+                                        range: span_to_lsp_range(document.value(), &binding.span),
+                                    })));
+                                }
+                            }
+                        }
+                    }
+                }
+
                 for tx in &ast.txs {
                     if span_contains(&tx.span, offset) {
                         for param in &tx.parameters.parameters {
@@ -291,6 +327,58 @@ impl LanguageServer for Context {
                             ),
                         }),
                         range: Some(span_to_lsp_range(document.value(), &asset.span)),
+                    }));
+                }
+            }
+
+            for func in &ast.functions {
+                if span_contains(&func.span, offset) {
+                    // Parameter-specific hover, when the cursor is on a parameter name.
+                    if span_contains(&func.parameters.span, offset) {
+                        for param in &func.parameters.parameters {
+                            if span_contains(&param.name.span, offset) {
+                                return Ok(Some(Hover {
+                                    contents: HoverContents::Markup(MarkupContent {
+                                        kind: MarkupKind::Markdown,
+                                        value: format!(
+                                            "**Parameter**: `{}`\n\n**Type**: `{}`",
+                                            param.name.value, param.r#type
+                                        ),
+                                    }),
+                                    range: Some(span_to_lsp_range(
+                                        document.value(),
+                                        &param.name.span,
+                                    )),
+                                }));
+                            }
+                        }
+                    }
+
+                    let params = func
+                        .parameters
+                        .parameters
+                        .iter()
+                        .map(|p| format!("{}: {}", p.name.value, p.r#type))
+                        .collect::<Vec<_>>()
+                        .join(", ");
+                    let (label, blurb) = if func.builtin.is_some() {
+                        ("Built-in function", "A function provided by the compiler.")
+                    } else {
+                        (
+                            "Function",
+                            "A user-defined function. Calls are inlined at compile time.",
+                        )
+                    };
+
+                    return Ok(Some(Hover {
+                        contents: HoverContents::Markup(MarkupContent {
+                            kind: MarkupKind::Markdown,
+                            value: format!(
+                                "**{}**: `{}({}) -> {}`\n\n{}",
+                                label, func.name.value, params, func.return_type, blurb
+                            ),
+                        }),
+                        range: Some(span_to_lsp_range(document.value(), &func.span)),
                     }));
                 }
             }
@@ -480,6 +568,27 @@ impl LanguageServer for Context {
                         "Tx".to_string(),
                         SymbolKind::METHOD,
                         span_to_lsp_range(document.value(), &tx.span),
+                        Some(children),
+                    ));
+                }
+
+                for func in ast.functions {
+                    let mut children: Vec<DocumentSymbol> = Vec::new();
+                    for parameter in &func.parameters.parameters {
+                        children.push(make_symbol(
+                            parameter.name.value.clone(),
+                            format!("Parameter<{}>", parameter.r#type),
+                            SymbolKind::FIELD,
+                            span_to_lsp_range(document.value(), &func.parameters.span),
+                            None,
+                        ));
+                    }
+
+                    symbols.push(make_symbol(
+                        func.name.value.clone(),
+                        format!("Fn -> {}", func.return_type),
+                        SymbolKind::FUNCTION,
+                        span_to_lsp_range(document.value(), &func.span),
                         Some(children),
                     ));
                 }

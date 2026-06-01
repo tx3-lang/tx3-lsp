@@ -33,6 +33,37 @@ pub fn find_symbol_in_program<'a>(
             return Some(sym);
         }
     }
+    for func in &program.functions {
+        if let Some(sym) = visit_fn_def(func, offset) {
+            return Some(sym);
+        }
+    }
+    None
+}
+
+fn visit_fn_def<'a>(func: &'a tx3_lang::ast::FnDef, offset: usize) -> Option<SymbolAtOffset<'a>> {
+    if in_span(&func.name.span, offset) {
+        return Some(SymbolAtOffset::Identifier(&func.name));
+    }
+    if let Some(sym) = visit_parameter_list(&func.parameters, offset) {
+        return Some(sym);
+    }
+    if let Some(sym) = visit_type(&func.return_type, offset) {
+        return Some(sym);
+    }
+    if let Some(body) = &func.body {
+        for binding in &body.let_bindings {
+            if in_span(&binding.name.span, offset) {
+                return Some(SymbolAtOffset::Identifier(&binding.name));
+            }
+            if let Some(sym) = visit_data_expr(&binding.value, offset) {
+                return Some(sym);
+            }
+        }
+        if let Some(sym) = visit_data_expr(&body.result, offset) {
+            return Some(sym);
+        }
+    }
     None
 }
 
@@ -193,6 +224,30 @@ fn visit_data_expr<'a>(
                 }
             }
             None
+        }
+        tx3_lang::ast::DataExpr::FnCall(call) => {
+            if let Some(sym) = visit_identifier(&call.callee, offset) {
+                return Some(sym);
+            }
+            for arg in &call.args {
+                if let Some(sym) = visit_data_expr(arg, offset) {
+                    return Some(sym);
+                }
+            }
+            None
+        }
+        tx3_lang::ast::DataExpr::AddOp(op) => {
+            visit_data_expr(&op.lhs, offset).or_else(|| visit_data_expr(&op.rhs, offset))
+        }
+        tx3_lang::ast::DataExpr::SubOp(op) => {
+            visit_data_expr(&op.lhs, offset).or_else(|| visit_data_expr(&op.rhs, offset))
+        }
+        tx3_lang::ast::DataExpr::ConcatOp(op) => {
+            visit_data_expr(&op.lhs, offset).or_else(|| visit_data_expr(&op.rhs, offset))
+        }
+        tx3_lang::ast::DataExpr::NegateOp(op) => visit_data_expr(&op.operand, offset),
+        tx3_lang::ast::DataExpr::PropertyOp(op) => {
+            visit_data_expr(&op.operand, offset).or_else(|| visit_data_expr(&op.property, offset))
         }
         _ => None,
     }
@@ -441,4 +496,64 @@ fn visit_address_expr<'a>(
 
 fn in_span(span: &tx3_lang::ast::Span, offset: usize) -> bool {
     span.start <= offset && offset < span.end
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const SRC: &str = r#"party Sender;
+
+fn double(x: Int) -> Int {
+    let twice = x + x;
+    twice
+}
+
+tx pay(quantity: Int) {
+    output {
+        to: Sender,
+        amount: double(quantity),
+    }
+}
+"#;
+
+    fn ident_at(offset: usize) -> Option<String> {
+        let ast = tx3_lang::parsing::parse_string(SRC).expect("program should parse");
+        match find_symbol_in_program(&ast, offset) {
+            Some(SymbolAtOffset::Identifier(id)) => Some(id.value.clone()),
+            _ => None,
+        }
+    }
+
+    /// The offset of the `needle`'s `nth` occurrence. The start of a token is
+    /// inside it (spans are start-inclusive), so this works for single chars too.
+    fn at(needle: &str, nth: usize) -> usize {
+        SRC.match_indices(needle).nth(nth).expect("occurrence").0
+    }
+
+    #[test]
+    fn program_with_functions_parses() {
+        let ast = tx3_lang::parsing::parse_string(SRC).expect("program should parse");
+        assert_eq!(ast.functions.len(), 1);
+    }
+
+    #[test]
+    fn finds_function_declaration_name() {
+        // First `double` is the declaration.
+        assert_eq!(ident_at(at("double", 0)).as_deref(), Some("double"));
+    }
+
+    #[test]
+    fn finds_function_call_callee() {
+        // Second `double` is the call site inside `pay`.
+        assert_eq!(ident_at(at("double", 1)).as_deref(), Some("double"));
+    }
+
+    #[test]
+    fn finds_parameter_and_let_binding_in_body() {
+        // The `x` parameter as used in `x + x`.
+        assert_eq!(ident_at(at("x + x", 0)).as_deref(), Some("x"));
+        // The `twice` let-binding name.
+        assert_eq!(ident_at(at("twice", 0)).as_deref(), Some("twice"));
+    }
 }
