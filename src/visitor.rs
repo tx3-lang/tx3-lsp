@@ -236,15 +236,19 @@ fn visit_data_expr<'a>(
             }
             None
         }
-        tx3_lang::ast::DataExpr::AddOp(op) => visit_data_expr(&op.lhs, offset)
-            .or_else(|| visit_data_expr(&op.rhs, offset)),
-        tx3_lang::ast::DataExpr::SubOp(op) => visit_data_expr(&op.lhs, offset)
-            .or_else(|| visit_data_expr(&op.rhs, offset)),
-        tx3_lang::ast::DataExpr::ConcatOp(op) => visit_data_expr(&op.lhs, offset)
-            .or_else(|| visit_data_expr(&op.rhs, offset)),
+        tx3_lang::ast::DataExpr::AddOp(op) => {
+            visit_data_expr(&op.lhs, offset).or_else(|| visit_data_expr(&op.rhs, offset))
+        }
+        tx3_lang::ast::DataExpr::SubOp(op) => {
+            visit_data_expr(&op.lhs, offset).or_else(|| visit_data_expr(&op.rhs, offset))
+        }
+        tx3_lang::ast::DataExpr::ConcatOp(op) => {
+            visit_data_expr(&op.lhs, offset).or_else(|| visit_data_expr(&op.rhs, offset))
+        }
         tx3_lang::ast::DataExpr::NegateOp(op) => visit_data_expr(&op.operand, offset),
-        tx3_lang::ast::DataExpr::PropertyOp(op) => visit_data_expr(&op.operand, offset)
-            .or_else(|| visit_data_expr(&op.property, offset)),
+        tx3_lang::ast::DataExpr::PropertyOp(op) => {
+            visit_data_expr(&op.operand, offset).or_else(|| visit_data_expr(&op.property, offset))
+        }
         _ => None,
     }
 }

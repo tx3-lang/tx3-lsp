@@ -186,10 +186,7 @@ impl LanguageServer for Context {
                             if param.name.value == identifier.value {
                                 return Ok(Some(GotoDefinitionResponse::Scalar(Location {
                                     uri: uri.clone(),
-                                    range: span_to_lsp_range(
-                                        document.value(),
-                                        &param.name.span,
-                                    ),
+                                    range: span_to_lsp_range(document.value(), &param.name.span),
                                 })));
                             }
                         }
@@ -199,10 +196,7 @@ impl LanguageServer for Context {
                                 if binding.name.value == identifier.value {
                                     return Ok(Some(GotoDefinitionResponse::Scalar(Location {
                                         uri: uri.clone(),
-                                        range: span_to_lsp_range(
-                                            document.value(),
-                                            &binding.span,
-                                        ),
+                                        range: span_to_lsp_range(document.value(), &binding.span),
                                     })));
                                 }
                             }
@@ -351,7 +345,10 @@ impl LanguageServer for Context {
                                             param.name.value, param.r#type
                                         ),
                                     }),
-                                    range: Some(span_to_lsp_range(document.value(), &param.name.span)),
+                                    range: Some(span_to_lsp_range(
+                                        document.value(),
+                                        &param.name.span,
+                                    )),
                                 }));
                             }
                         }
@@ -367,7 +364,10 @@ impl LanguageServer for Context {
                     let (label, blurb) = if func.builtin.is_some() {
                         ("Built-in function", "A function provided by the compiler.")
                     } else {
-                        ("Function", "A user-defined function. Calls are inlined at compile time.")
+                        (
+                            "Function",
+                            "A user-defined function. Calls are inlined at compile time.",
+                        )
                     };
 
                     return Ok(Some(Hover {
