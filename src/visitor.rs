@@ -242,6 +242,9 @@ fn visit_data_expr<'a>(
         tx3_lang::ast::DataExpr::SubOp(op) => {
             visit_data_expr(&op.lhs, offset).or_else(|| visit_data_expr(&op.rhs, offset))
         }
+        tx3_lang::ast::DataExpr::MulOp(op) => {
+            visit_data_expr(&op.lhs, offset).or_else(|| visit_data_expr(&op.rhs, offset))
+        }
         tx3_lang::ast::DataExpr::ConcatOp(op) => {
             visit_data_expr(&op.lhs, offset).or_else(|| visit_data_expr(&op.rhs, offset))
         }
