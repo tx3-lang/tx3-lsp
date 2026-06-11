@@ -147,6 +147,9 @@ fn visit_type<'a>(ty: &'a tx3_lang::ast::Type, offset: usize) -> Option<SymbolAt
     match &ty {
         tx3_lang::ast::Type::Custom(id) => visit_identifier(id, offset),
         tx3_lang::ast::Type::List(inner) => visit_type(inner, offset),
+        tx3_lang::ast::Type::Tuple(elements) => {
+            elements.iter().find_map(|inner| visit_type(inner, offset))
+        }
         _ => None,
     }
 }
@@ -219,6 +222,14 @@ fn visit_data_expr<'a>(
         tx3_lang::ast::DataExpr::StructConstructor(sc) => visit_struct_constructor(sc, offset),
         tx3_lang::ast::DataExpr::ListConstructor(lc) => {
             for el in &lc.elements {
+                if let Some(sym) = visit_data_expr(el, offset) {
+                    return Some(sym);
+                }
+            }
+            None
+        }
+        tx3_lang::ast::DataExpr::TupleConstructor(tc) => {
+            for el in &tc.elements {
                 if let Some(sym) = visit_data_expr(el, offset) {
                     return Some(sym);
                 }
