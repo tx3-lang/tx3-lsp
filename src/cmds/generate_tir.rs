@@ -14,7 +14,7 @@ impl TryFrom<Vec<Value>> for Args {
     fn try_from(value: Vec<Value>) -> Result<Self, Self::Error> {
         Ok(Args {
             document_url: value
-                .get(0)
+                .first()
                 .and_then(|v| v.as_str())
                 .map(|s| s.to_owned())
                 .ok_or(Error::InvalidCommandArgs("document_url".to_string()))?,
