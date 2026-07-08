@@ -5,17 +5,15 @@ members = ["cargo:."]
 [dist]
 cargo-dist-version = "0.31.0"
 ci = "github"
-installers = ["shell", "powershell", "npm", "homebrew"]
-tap = "txpipe/homebrew-tap"
+installers = ["shell"]
 targets = ["aarch64-apple-darwin", "aarch64-unknown-linux-gnu", "x86_64-unknown-linux-gnu", "x86_64-pc-windows-msvc"]
-publish-jobs = ["homebrew", "npm", "./publish-crates"]
+publish-jobs = ["./publish-crates"]
 publish-prereleases = true
 pr-run-mode = "plan"
 install-updater = false
 rust-toolchain-version = "1.91"
 windows-archive = ".tar.gz"
 unix-archive = ".tar.gz"
-npm-scope = "@tx3-lang"
 install-path = "CARGO_HOME"
 
 [dist.github-custom-runners]
