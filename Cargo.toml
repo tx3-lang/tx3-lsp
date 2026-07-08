@@ -9,6 +9,7 @@ version = "0.10.0"
 keywords = ["blockchain", "cardano", "utxo", "dsl"]
 homepage = "https://github.com/tx3-lang/tx3-lsp"
 readme = "README.md"
+publish = false
 
 [dependencies]
 tokio = { version = "1.44.1", features = ["full"] }
@@ -31,8 +32,12 @@ clap = { version = "4.5", features = ["derive"] }
 inherits = "release"
 lto = "thin"
 
+[package.metadata.dist]
+dist = true
+
 [workspace.metadata.release]
 push = false
 publish = false
 tag-name = "v{{version}}"
 pre-release-commit-message = "release: v{{version}}"
+pre-release-hook = ["git", "cliff", "-o", "CHANGELOG.md", "--latest"]
