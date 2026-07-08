@@ -1,6 +1,6 @@
+use crate::{Context, Error};
 use serde_json::{json, Value};
 use tx3_tir::reduce::Apply;
-use crate::{Context, Error};
 
 #[derive(Debug)]
 pub struct Args {
