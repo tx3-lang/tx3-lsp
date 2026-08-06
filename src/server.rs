@@ -414,7 +414,7 @@ impl LanguageServer for Context {
                 }
 
                 if span_contains(&tx.parameters.span, offset) {
-                    for param in &tx.parameters.parameters {
+                    if let Some(param) = tx.parameters.parameters.first() {
                         return Ok(Some(Hover {
                             contents: HoverContents::Markup(MarkupContent {
                                 kind: MarkupKind::Markdown,
@@ -439,7 +439,7 @@ impl LanguageServer for Context {
                                 param.name.value, param.r#type
                             ));
                         }
-                        hover_text.push_str("\n");
+                        hover_text.push('\n');
                     }
 
                     if !tx.inputs.is_empty() {
@@ -447,7 +447,7 @@ impl LanguageServer for Context {
                         for input in &tx.inputs {
                             hover_text.push_str(&format!("- `{}`\n", input.name));
                         }
-                        hover_text.push_str("\n");
+                        hover_text.push('\n');
                     }
 
                     if !tx.outputs.is_empty() {
@@ -491,9 +491,9 @@ impl LanguageServer for Context {
                 name,
                 detail: Some(detail),
                 kind,
-                range: range,
+                range,
                 selection_range: range,
-                children: children,
+                children,
                 tags: Default::default(),
                 deprecated: Default::default(),
             }

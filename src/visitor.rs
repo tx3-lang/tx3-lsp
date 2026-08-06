@@ -1,6 +1,7 @@
 #[derive(Debug)]
 pub enum SymbolAtOffset<'a> {
     Identifier(&'a tx3_lang::ast::Identifier),
+    #[allow(dead_code)]
     TypeIdentifier(&'a tx3_lang::ast::Type),
 }
 
@@ -423,7 +424,7 @@ fn visit_type_def<'a>(ty: &'a tx3_lang::ast::TypeDef, offset: usize) -> Option<S
         return Some(SymbolAtOffset::Identifier(&ty.name));
     }
     for case in &ty.cases {
-        for field in &case.fields {
+        for _field in &case.fields {
             // TODO: wait for the introduction of `TypeAnnotation` in AST
 
             // if in_span(&field.r#type.span, offset) {

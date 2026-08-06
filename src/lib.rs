@@ -193,60 +193,40 @@ impl Context {
                         }
                         processed_spans.insert(span_key);
 
-                        let token_type = if ast
-                            .parties
-                            .iter()
-                            .any(|p| p.name.value == identifier.value)
-                        {
-                            TOKEN_PARTY
-                        } else if ast
-                            .policies
-                            .iter()
-                            .any(|p| p.name.value == identifier.value)
-                        {
-                            TOKEN_POLICY
-                        } else if ast.types.iter().any(|t| t.name.value == identifier.value) {
-                            TOKEN_TYPE
-                        } else if Context::is_type_field_reference(ast, &identifier.value, offset) {
-                            TOKEN_TYPE
-                        } else if ast.assets.iter().any(|a| a.name.value == identifier.value) {
-                            TOKEN_CLASS
-                        } else if ast
-                            .functions
-                            .iter()
-                            .any(|f| f.name.value == identifier.value)
-                        {
-                            // Both a function's declaration name and any call-site
-                            // callee resolve here, since they share the identifier.
-                            TOKEN_FUNCTION
-                        } else {
-                            let mut found_type = None;
+                        let token_type =
+                            if ast.parties.iter().any(|p| p.name.value == identifier.value) {
+                                TOKEN_PARTY
+                            } else if ast
+                                .policies
+                                .iter()
+                                .any(|p| p.name.value == identifier.value)
+                            {
+                                TOKEN_POLICY
+                            } else if ast.types.iter().any(|t| t.name.value == identifier.value)
+                                || Context::is_type_field_reference(ast, &identifier.value, offset)
+                            {
+                                TOKEN_TYPE
+                            } else if ast.assets.iter().any(|a| a.name.value == identifier.value) {
+                                TOKEN_CLASS
+                            } else if ast
+                                .functions
+                                .iter()
+                                .any(|f| f.name.value == identifier.value)
+                            {
+                                // Both a function's declaration name and any call-site
+                                // callee resolve here, since they share the identifier.
+                                TOKEN_FUNCTION
+                            } else {
+                                let mut found_type = None;
 
-                            for tx in &ast.txs {
-                                if tx.name.value == identifier.value {
-                                    found_type = Some(TOKEN_FUNCTION);
-                                    break;
-                                }
-
-                                if crate::span_contains(&tx.span, offset) {
-                                    for param in &tx.parameters.parameters {
-                                        if param.name.value == identifier.value {
-                                            found_type = Some(TOKEN_PARAMETER);
-                                            break;
-                                        }
+                                for tx in &ast.txs {
+                                    if tx.name.value == identifier.value {
+                                        found_type = Some(TOKEN_FUNCTION);
+                                        break;
                                     }
-                                }
 
-                                if found_type.is_some() {
-                                    break;
-                                }
-                            }
-
-                            // Parameters referenced inside a function body.
-                            if found_type.is_none() {
-                                for func in &ast.functions {
-                                    if crate::span_contains(&func.span, offset) {
-                                        for param in &func.parameters.parameters {
+                                    if crate::span_contains(&tx.span, offset) {
+                                        for param in &tx.parameters.parameters {
                                             if param.name.value == identifier.value {
                                                 found_type = Some(TOKEN_PARAMETER);
                                                 break;
@@ -258,10 +238,27 @@ impl Context {
                                         break;
                                     }
                                 }
-                            }
 
-                            found_type.unwrap_or(TOKEN_VARIABLE)
-                        };
+                                // Parameters referenced inside a function body.
+                                if found_type.is_none() {
+                                    for func in &ast.functions {
+                                        if crate::span_contains(&func.span, offset) {
+                                            for param in &func.parameters.parameters {
+                                                if param.name.value == identifier.value {
+                                                    found_type = Some(TOKEN_PARAMETER);
+                                                    break;
+                                                }
+                                            }
+                                        }
+
+                                        if found_type.is_some() {
+                                            break;
+                                        }
+                                    }
+                                }
+
+                                found_type.unwrap_or(TOKEN_VARIABLE)
+                            };
 
                         token_infos.push(TokenInfo {
                             range: crate::span_to_lsp_range(rope, &identifier.span),
@@ -343,7 +340,8 @@ impl Context {
 
     fn get_document_program(&self, url_arg: &str) -> Result<tx3_lang::ast::Program, Error> {
         let document = self.get_document(url_arg)?;
-        tx3_lang::parsing::parse_string(document.to_string().as_str()).map_err(Error::ProgramParsingError)
+        tx3_lang::parsing::parse_string(document.to_string().as_str())
+            .map_err(Error::ProgramParsingError)
     }
 
     async fn process_document(&self, uri: Url, text: &str) -> Vec<Diagnostic> {
